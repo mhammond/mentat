@@ -31,10 +31,10 @@ use mentat_query::{
 };
 
 use mentat_query_algebrizer::{
+    AlgebrizerError,
     BindingError,
     ComputedTable,
-    Error,
-    ErrorKind,
+    InvalidBinding,
     Known,
     QueryInputs,
 };
@@ -257,8 +257,8 @@ fn test_ground_coll_heterogeneous_types() {
     let schema = prepopulated_schema();
     let known = Known::for_schema(&schema);
     let e = bails(known, &q);
-    match e {
-        Error(ErrorKind::InvalidGroundConstant, _) => {
+    match e.downcast().expect("proper error") {
+        AlgebrizerError::InvalidGroundConstant => {
         },
         _ => {
             panic!();
@@ -272,8 +272,8 @@ fn test_ground_rel_heterogeneous_types() {
     let schema = prepopulated_schema();
     let known = Known::for_schema(&schema);
     let e = bails(known, &q);
-    match e {
-        Error(ErrorKind::InvalidGroundConstant, _) => {
+    match e.downcast().expect("proper error") {
+        AlgebrizerError::InvalidGroundConstant => {
         },
         _ => {
             panic!();
@@ -286,11 +286,10 @@ fn test_ground_tuple_duplicate_vars() {
     let q = r#"[:find ?x :where [?x :foo/age ?v] [(ground [8 10]) [?x ?x]]]"#;
     let schema = prepopulated_schema();
     let known = Known::for_schema(&schema);
-    let e = bails(known, &q);
-    match e {
-        Error(ErrorKind::InvalidBinding(v, e), _) => {
-            assert_eq!(v, PlainSymbol::plain("ground"));
-            assert_eq!(e, BindingError::RepeatedBoundVariable);
+    let e: InvalidBinding = bails(known, &q).downcast().expect("proper error");
+    assert_eq!(e.function, PlainSymbol::plain("ground"));
+    match e.inner.get_context() {
+        BindingError::RepeatedBoundVariable => {
         },
         _ => {
             panic!();
@@ -303,11 +302,10 @@ fn test_ground_rel_duplicate_vars() {
     let q = r#"[:find ?x :where [?x :foo/age ?v] [(ground [[8 10]]) [[?x ?x]]]]"#;
     let schema = prepopulated_schema();
     let known = Known::for_schema(&schema);
-    let e = bails(known, &q);
-    match e {
-        Error(ErrorKind::InvalidBinding(v, e), _) => {
-            assert_eq!(v, PlainSymbol::plain("ground"));
-            assert_eq!(e, BindingError::RepeatedBoundVariable);
+    let e: InvalidBinding = bails(known, &q).downcast().expect("expected InvalidBinding");
+    assert_eq!(e.function, PlainSymbol::plain("ground"));
+    match e.inner.get_context() {
+        BindingError::RepeatedBoundVariable => {
         },
         _ => {
             panic!();
@@ -320,9 +318,9 @@ fn test_ground_nonexistent_variable_invalid() {
     let q = r#"[:find ?x ?e :where [?e _ ?x] (not [(ground 17) ?v])]"#;
     let schema = prepopulated_schema();
     let known = Known::for_schema(&schema);
-    let e = bails(known, &q);
+    let e = bails(known, &q).downcast().expect("proper error");
     match e {
-        Error(ErrorKind::UnboundVariable(PlainSymbol(v)), _) => {
+        AlgebrizerError::UnboundVariable(PlainSymbol(v)) => {
             assert_eq!(v, "?v".to_string());
         },
         _ => {
@@ -344,9 +342,9 @@ fn test_unbound_input_variable_invalid() {
 
     let i = QueryInputs::new(types, BTreeMap::default()).expect("valid QueryInputs");
 
-    let e = bails_with_inputs(known, &q, i);
+    let e = bails_with_inputs(known, &q, i).downcast().expect("proper error");
     match e {
-        Error(ErrorKind::UnboundVariable(v), _) => {
+        AlgebrizerError::UnboundVariable(v) => {
             assert_eq!(v.0, "?x");
         },
         _ => {
