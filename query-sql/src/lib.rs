@@ -40,6 +40,7 @@ use mentat_query_algebrizer::{
 
 use mentat_sql::{
     BuildQueryResult,
+    EmptyBuildQueryResult,
     QueryBuilder,
     QueryFragment,
     SQLiteQueryBuilder,
@@ -99,7 +100,7 @@ pub enum GroupBy {
 }
 
 impl QueryFragment for GroupBy {
-    fn push_sql(&self, out: &mut QueryBuilder) -> BuildQueryResult {
+    fn push_sql(&self, out: &mut QueryBuilder) -> EmptyBuildQueryResult {
         match self {
             &GroupBy::ProjectedColumn(ref name) => {
                 out.push_identifier(name.as_str())
@@ -221,7 +222,7 @@ pub struct SelectQuery {
     pub limit: Limit,
 }
 
-fn push_variable_column(qb: &mut QueryBuilder, vc: &VariableColumn) -> BuildQueryResult {
+fn push_variable_column(qb: &mut QueryBuilder, vc: &VariableColumn) -> EmptyBuildQueryResult {
     match vc {
         &VariableColumn::Variable(ref v) => {
             qb.push_identifier(v.as_str())
@@ -232,7 +233,7 @@ fn push_variable_column(qb: &mut QueryBuilder, vc: &VariableColumn) -> BuildQuer
     }
 }
 
-fn push_column(qb: &mut QueryBuilder, col: &Column) -> BuildQueryResult {
+fn push_column(qb: &mut QueryBuilder, col: &Column) -> EmptyBuildQueryResult {
     match col {
         &Column::Fixed(ref d) => {
             qb.push_sql(d.as_str());
@@ -254,7 +255,7 @@ fn push_column(qb: &mut QueryBuilder, col: &Column) -> BuildQueryResult {
 // Turn that representation into SQL.
 
 impl QueryFragment for ColumnOrExpression {
-    fn push_sql(&self, out: &mut QueryBuilder) -> BuildQueryResult {
+    fn push_sql(&self, out: &mut QueryBuilder) -> EmptyBuildQueryResult {
         use self::ColumnOrExpression::*;
         match self {
             &Column(ref qa) => {
@@ -286,7 +287,7 @@ impl QueryFragment for ColumnOrExpression {
 }
 
 impl QueryFragment for Expression {
-    fn push_sql(&self, out: &mut QueryBuilder) -> BuildQueryResult {
+    fn push_sql(&self, out: &mut QueryBuilder) -> EmptyBuildQueryResult {
         match self {
             &Expression::Unary { ref sql_op, ref arg } => {
                 out.push_sql(sql_op);              // No need to escape built-ins.
@@ -300,7 +301,7 @@ impl QueryFragment for Expression {
 }
 
 impl QueryFragment for Projection {
-    fn push_sql(&self, out: &mut QueryBuilder) -> BuildQueryResult {
+    fn push_sql(&self, out: &mut QueryBuilder) -> EmptyBuildQueryResult {
         use self::Projection::*;
         match self {
             &One => out.push_sql("1"),
@@ -324,7 +325,7 @@ impl QueryFragment for Projection {
 }
 
 impl QueryFragment for Op {
-    fn push_sql(&self, out: &mut QueryBuilder) -> BuildQueryResult {
+    fn push_sql(&self, out: &mut QueryBuilder) -> EmptyBuildQueryResult {
         // No escaping needed.
         out.push_sql(self.0);
         Ok(())
@@ -332,7 +333,7 @@ impl QueryFragment for Op {
 }
 
 impl QueryFragment for Constraint {
-    fn push_sql(&self, out: &mut QueryBuilder) -> BuildQueryResult {
+    fn push_sql(&self, out: &mut QueryBuilder) -> EmptyBuildQueryResult {
         use self::Constraint::*;
         match self {
             &Infix { ref op, ref left, ref right } => {
@@ -402,21 +403,21 @@ impl QueryFragment for Constraint {
 }
 
 impl QueryFragment for JoinOp {
-    fn push_sql(&self, out: &mut QueryBuilder) -> BuildQueryResult {
+    fn push_sql(&self, out: &mut QueryBuilder) -> EmptyBuildQueryResult {
         out.push_sql(" JOIN ");
         Ok(())
     }
 }
 
 // We don't own QualifiedAlias or QueryFragment, so we can't implement the trait.
-fn qualified_alias_push_sql(out: &mut QueryBuilder, qa: &QualifiedAlias) -> BuildQueryResult {
+fn qualified_alias_push_sql(out: &mut QueryBuilder, qa: &QualifiedAlias) -> EmptyBuildQueryResult {
     out.push_identifier(qa.0.as_str())?;
     out.push_sql(".");
     push_column(out, &qa.1)
 }
 
 // We don't own SourceAlias or QueryFragment, so we can't implement the trait.
-fn source_alias_push_sql(out: &mut QueryBuilder, sa: &SourceAlias) -> BuildQueryResult {
+fn source_alias_push_sql(out: &mut QueryBuilder, sa: &SourceAlias) -> EmptyBuildQueryResult {
     let &SourceAlias(ref table, ref alias) = sa;
     out.push_identifier(table.name())?;
     out.push_sql(" AS ");
@@ -424,7 +425,7 @@ fn source_alias_push_sql(out: &mut QueryBuilder, sa: &SourceAlias) -> BuildQuery
 }
 
 impl QueryFragment for TableList {
-    fn push_sql(&self, out: &mut QueryBuilder) -> BuildQueryResult {
+    fn push_sql(&self, out: &mut QueryBuilder) -> EmptyBuildQueryResult {
         if self.0.is_empty() {
             return Ok(());
         }
@@ -437,7 +438,7 @@ impl QueryFragment for TableList {
 }
 
 impl QueryFragment for Join {
-    fn push_sql(&self, out: &mut QueryBuilder) -> BuildQueryResult {
+    fn push_sql(&self, out: &mut QueryBuilder) -> EmptyBuildQueryResult {
         self.left.push_sql(out)?;
         self.op.push_sql(out)?;
         self.right.push_sql(out)
@@ -445,7 +446,7 @@ impl QueryFragment for Join {
 }
 
 impl QueryFragment for TableOrSubquery {
-    fn push_sql(&self, out: &mut QueryBuilder) -> BuildQueryResult {
+    fn push_sql(&self, out: &mut QueryBuilder) -> EmptyBuildQueryResult {
         use self::TableOrSubquery::*;
         match self {
             &Table(ref sa) => source_alias_push_sql(out, sa),
@@ -475,7 +476,7 @@ impl QueryFragment for TableOrSubquery {
 }
 
 impl QueryFragment for Values {
-    fn push_sql(&self, out: &mut QueryBuilder) -> BuildQueryResult {
+    fn push_sql(&self, out: &mut QueryBuilder) -> EmptyBuildQueryResult {
         // There are at least 3 ways to name the columns of a VALUES table:
         // 1) the columns are named "", ":1", ":2", ... -- but this is undocumented.  See
         //    http://stackoverflow.com/a/40921724.
@@ -516,7 +517,7 @@ impl QueryFragment for Values {
 }
 
 impl QueryFragment for FromClause {
-    fn push_sql(&self, out: &mut QueryBuilder) -> BuildQueryResult {
+    fn push_sql(&self, out: &mut QueryBuilder) -> EmptyBuildQueryResult {
         use self::FromClause::*;
         match self {
             &TableList(ref table_list) => {
@@ -537,7 +538,7 @@ impl QueryFragment for FromClause {
 }
 
 impl SelectQuery {
-    fn push_variable_param(&self, var: &Variable, out: &mut QueryBuilder) -> BuildQueryResult {
+    fn push_variable_param(&self, var: &Variable, out: &mut QueryBuilder) -> EmptyBuildQueryResult {
         // `var` is something like `?foo99-people`.
         // Trim the `?` and escape the rest. Prepend `i` to distinguish from
         // the inline value space `v`.
@@ -550,7 +551,7 @@ impl SelectQuery {
 }
 
 impl QueryFragment for SelectQuery {
-    fn push_sql(&self, out: &mut QueryBuilder) -> BuildQueryResult {
+    fn push_sql(&self, out: &mut QueryBuilder) -> EmptyBuildQueryResult {
         if self.distinct {
             out.push_sql("SELECT DISTINCT ");
         } else {
@@ -607,7 +608,7 @@ impl QueryFragment for SelectQuery {
 }
 
 impl SelectQuery {
-    pub fn to_sql_query(&self) -> mentat_sql::Result<SQLQuery> {
+    pub fn to_sql_query(&self) -> BuildQueryResult<SQLQuery> {
         let mut builder = SQLiteQueryBuilder::new();
         self.push_sql(&mut builder).map(|_| builder.finish())
     }
