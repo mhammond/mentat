@@ -30,13 +30,25 @@ use combine::combinator::{
     try,
 };
 
-use errors as cli;
+use CliError;
 
 use edn;
+
+use failure::{
+    Compat,
+    Error,
+};
 
 use mentat::{
     CacheDirection,
 };
+
+#[macro_export]
+macro_rules! bail {
+    ($e:expr) => (
+        return Err($e.into());
+    )
+}
 
 pub static COMMAND_CACHE: &'static str = &"cache";
 pub static COMMAND_CLOSE: &'static str = &"close";
@@ -174,7 +186,7 @@ impl Command {
     }
 }
 
-pub fn command(s: &str) -> Result<Command, cli::Error> {
+pub fn command(s: &str) -> Result<Command, Error> {
     let path = || many1::<String, _>(satisfy(|c: char| !c.is_whitespace()));
     let argument = || many1::<String, _>(satisfy(|c: char| !c.is_whitespace()));
     let arguments = || sep_end_by::<Vec<_>, _, _>(many1(satisfy(|c: char| !c.is_whitespace())), many1::<Vec<_>, _>(space())).expected("arguments");
@@ -188,7 +200,7 @@ pub fn command(s: &str) -> Result<Command, cli::Error> {
     let edn_arg_parser = || spaces()
                             .with(look_ahead(string("[").or(string("{")))
                                 .with(many1::<Vec<_>, _>(try(any())))
-                                .and_then(|args| -> Result<String, cli::Error> {
+                                .and_then(|args| -> Result<String, Compat<Error>> {
                                     Ok(args.iter().collect())
                                 })
                             );
@@ -211,7 +223,7 @@ pub fn command(s: &str) -> Result<Command, cli::Error> {
                     .with(no_arg_parser())
                     .map(|args| {
                         if !args.is_empty() {
-                            bail!(cli::ErrorKind::CommandParse(format!("Unrecognized argument {:?}", args[0])) );
+                            bail!(CliError::CommandParse(format!("Unrecognized argument {:?}", args[0])) );
                         }
                         Ok(Command::Close)
                     });
@@ -220,7 +232,7 @@ pub fn command(s: &str) -> Result<Command, cli::Error> {
                     .with(no_arg_parser())
                     .map(|args| {
                         if !args.is_empty() {
-                            bail!(cli::ErrorKind::CommandParse(format!("Unrecognized argument {:?}", args[0])) );
+                            bail!(CliError::CommandParse(format!("Unrecognized argument {:?}", args[0])) );
                         }
                         Ok(Command::Exit)
                     });
@@ -251,10 +263,10 @@ pub fn command(s: &str) -> Result<Command, cli::Error> {
                     .with(arguments())
                     .map(|args| {
                         if args.len() < 1 {
-                            bail!(cli::ErrorKind::CommandParse("Missing required argument".to_string()));
+                            bail!(CliError::CommandParse("Missing required argument".to_string()));
                         }
                         if args.len() > 1 {
-                            bail!(cli::ErrorKind::CommandParse(format!("Unrecognized argument {:?}", args[1])));
+                            bail!(CliError::CommandParse(format!("Unrecognized argument {:?}", args[1])));
                         }
                         Ok(Command::Open(args[0].clone()))
                     });
@@ -264,10 +276,10 @@ pub fn command(s: &str) -> Result<Command, cli::Error> {
                     .with(arguments())
                     .map(|args| {
                         if args.len() < 1 {
-                            bail!(cli::ErrorKind::CommandParse("Missing required argument".to_string()));
+                            bail!(CliError::CommandParse("Missing required argument".to_string()));
                         }
                         if args.len() > 1 {
-                            bail!(cli::ErrorKind::CommandParse(format!("Unrecognized argument {:?}", args[1])));
+                            bail!(CliError::CommandParse(format!("Unrecognized argument {:?}", args[1])));
                         }
                         Ok(Command::OpenEmpty(args[0].clone()))
                     });
@@ -288,7 +300,7 @@ pub fn command(s: &str) -> Result<Command, cli::Error> {
                     .with(no_arg_parser())
                     .map(|args| {
                         if !args.is_empty() {
-                            bail!(cli::ErrorKind::CommandParse(format!("Unrecognized argument {:?}", args[0])) );
+                            bail!(CliError::CommandParse(format!("Unrecognized argument {:?}", args[0])) );
                         }
                         Ok(Command::Schema)
                     });
@@ -298,10 +310,10 @@ pub fn command(s: &str) -> Result<Command, cli::Error> {
                     .with(arguments())
                     .map(|args| {
                         if args.len() < 1 {
-                            bail!(cli::ErrorKind::CommandParse("Missing required argument".to_string()));
+                            bail!(CliError::CommandParse("Missing required argument".to_string()));
                         }
                         if args.len() > 2 {
-                            bail!(cli::ErrorKind::CommandParse(format!("Unrecognized argument {:?}", args[2])));
+                            bail!(CliError::CommandParse(format!("Unrecognized argument {:?}", args[2])));
                         }
                         Ok(Command::Sync(args.clone()))
                     });
@@ -321,7 +333,7 @@ pub fn command(s: &str) -> Result<Command, cli::Error> {
 
     spaces()
     .skip(token('.'))
-    .with(choice::<[&mut Parser<Input = _, Output = Result<Command, cli::Error>>; 14], _>
+    .with(choice::<[&mut Parser<Input = _, Output = Result<Command, Error>>; 14], _>
           ([&mut try(help_parser),
             &mut try(import_parser),
             &mut try(timer_parser),
@@ -337,7 +349,7 @@ pub fn command(s: &str) -> Result<Command, cli::Error> {
             &mut try(sync_parser),
             &mut try(transact_parser)]))
         .parse(s)
-        .unwrap_or((Err(cli::ErrorKind::CommandParse(format!("Invalid command {:?}", s)).into()), "")).0
+        .unwrap_or((Err(CliError::CommandParse(format!("Invalid command {:?}", s)).into()), "")).0
 }
 
 #[cfg(test)]
