@@ -10,6 +10,9 @@
 
 #![allow(dead_code)]
 
+use std; // To refer to std::result::Result.
+use failure::Error;
+
 use std::collections::{
     BTreeMap,
     BTreeSet,
@@ -29,6 +32,16 @@ use types::{
     ValueType,
 };
 
+#[macro_export]
+macro_rules! bail {
+    ($e:expr) => (
+        return Err($e.into());
+    )
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+// TODO Error/ErrorKind pair
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CardinalityConflict {
     /// A cardinality one attribute has multiple assertions `[e a v1], [e a v2], ...`.
@@ -46,6 +59,7 @@ pub enum CardinalityConflict {
     },
 }
 
+// TODO Error/ErrorKind pair
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SchemaConstraintViolation {
     /// A transaction tried to assert datoms where one tempid upserts to two (or more) distinct
@@ -125,95 +139,61 @@ impl ::std::fmt::Display for InputError {
     }
 }
 
-error_chain! {
-    types {
-        Error, ErrorKind, ResultExt, Result;
-    }
+#[derive(Debug, Fail)]
+pub enum DbError {
+    /// We're just not done yet.  Message that the feature is recognized but not yet
+    /// implemented.
+    #[fail(display = "not yet implemented: {}", _0)]
+    NotYetImplemented(String),
 
-    foreign_links {
-        Rusqlite(rusqlite::Error);
-    }
+    /// We've been given a value that isn't the correct Mentat type.
+    #[fail(display = "value '{}' is not the expected Mentat value type {:?}", _0, _1)]
+    BadValuePair(String, ValueType),
 
-    errors {
-        /// We're just not done yet.  Message that the feature is recognized but not yet
-        /// implemented.
-        NotYetImplemented(t: String) {
-            description("not yet implemented")
-            display("not yet implemented: {}", t)
-        }
+    /// We've got corrupt data in the SQL store: a value and value_type_tag don't line up.
+    /// TODO _1.data_type()
+    #[fail(display = "bad SQL (value_type_tag, value) pair: ({}, {:?})", _0, _1)]
+    BadSQLValuePair(rusqlite::types::Value, i32),
 
-        /// We've been given a value that isn't the correct Mentat type.
-        BadValuePair(value: String, value_type: ValueType) {
-            description("value is not the expected Mentat value type")
-            display("value '{}' is not the expected Mentat value type {:?}", value, value_type)
-        }
+    // /// The SQLite store user_version isn't recognized.  This could be an old version of Mentat
+    // /// trying to open a newer version SQLite store; or it could be a corrupt file; or ...
+    // #[fail(display = "bad SQL store user_version: {}", _0)]
+    // BadSQLiteStoreVersion(i32),
 
-        /// We've got corrupt data in the SQL store: a value and value_type_tag don't line up.
-        BadSQLValuePair(value: rusqlite::types::Value, value_type_tag: i32) {
-            description("bad SQL (value_type_tag, value) pair")
-            display("bad SQL (value_type_tag, value) pair: ({}, {:?})", value_type_tag, value.data_type())
-        }
+    /// A bootstrap definition couldn't be parsed or installed.  This is a programmer error, not
+    /// a runtime error.
+    #[fail(display = "bad bootstrap definition: {}", _0)]
+    BadBootstrapDefinition(String),
 
-        // /// The SQLite store user_version isn't recognized.  This could be an old version of Mentat
-        // /// trying to open a newer version SQLite store; or it could be a corrupt file; or ...
-        // BadSQLiteStoreVersion(version: i32) {
-        //     description("bad SQL store user_version")
-        //     display("bad SQL store user_version: {}", version)
-        // }
+    /// A schema assertion couldn't be parsed.
+    #[fail(display = "bad schema assertion: {}", _0)]
+    BadSchemaAssertion(String),
 
-        /// A bootstrap definition couldn't be parsed or installed.  This is a programmer error, not
-        /// a runtime error.
-        BadBootstrapDefinition(t: String) {
-            description("bad bootstrap definition")
-            display("bad bootstrap definition: {}", t)
-        }
+    /// An ident->entid mapping failed.
+    #[fail(display = "no entid found for ident: {}", _0)]
+    UnrecognizedIdent(String),
 
-        /// A schema assertion couldn't be parsed.
-        BadSchemaAssertion(t: String) {
-            description("bad schema assertion")
-            display("bad schema assertion: {}", t)
-        }
+    /// An entid->ident mapping failed.
+    /// We also use this error if you try to transact an entid that we didn't allocate,
+    /// in part because we blow the stack in error_chain if we define a new enum!
+    #[fail(display = "unrecognized or no ident found for entid: {}", _0)]
+    UnrecognizedEntid(Entid),
 
-        /// An ident->entid mapping failed.
-        UnrecognizedIdent(ident: String) {
-            description("no entid found for ident")
-            display("no entid found for ident: {}", ident)
-        }
+    #[fail(display = "unknown attribute for entid: {}", _0)]
+    UnknownAttribute(Entid),
 
-        /// An entid->ident mapping failed.
-        /// We also use this error if you try to transact an entid that we didn't allocate,
-        /// in part because we blow the stack in error_chain if we define a new enum!
-        UnrecognizedEntid(entid: Entid) {
-            description("unrecognized or no ident found for entid")
-            display("unrecognized or no ident found for entid: {}", entid)
-        }
+    #[fail(display = "cannot reverse-cache non-unique attribute: {}", _0)]
+    CannotCacheNonUniqueAttributeInReverse(Entid),
 
-        UnknownAttribute(attr: Entid) {
-            description("unknown attribute")
-            display("unknown attribute for entid: {}", attr)
-        }
+    #[fail(display = "schema alteration failed: {}", _0)]
+    SchemaAlterationFailed(String),
 
-        CannotCacheNonUniqueAttributeInReverse(attr: Entid) {
-            description("cannot reverse-cache non-unique attribute")
-            display("cannot reverse-cache non-unique attribute: {}", attr)
-        }
+    /// A transaction tried to violate a constraint of the schema of the Mentat store.
+    #[fail(display = "schema constraint violation: {}", _0)]
+    SchemaConstraintViolation(SchemaConstraintViolation),
 
-        SchemaAlterationFailed(t: String) {
-            description("schema alteration failed")
-            display("schema alteration failed: {}", t)
-        }
-
-        /// A transaction tried to violate a constraint of the schema of the Mentat store.
-        SchemaConstraintViolation(violation: SchemaConstraintViolation) {
-            description("schema constraint violation")
-            display("schema constraint violation: {}", violation)
-        }
-
-        /// The transaction was malformed in some way (that was not recognized at parse time; for
-        /// example, in a way that is schema-dependent).
-        InputError(error: InputError) {
-            description("transaction input error")
-            display("transaction input error: {}", error)
-        }
-    }
+    /// The transaction was malformed in some way (that was not recognized at parse time; for
+    /// example, in a way that is schema-dependent).
+    #[fail(display = "transaction input error: {}", _0)]
+    InputError(InputError),
 }

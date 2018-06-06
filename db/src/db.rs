@@ -53,7 +53,10 @@ use mentat_core::{
     ValueRc,
 };
 
-use errors::{ErrorKind, Result, ResultExt};
+use errors::{
+    DbError,
+    Result,
+};
 use metadata;
 use schema::{
     SchemaBuilding,
@@ -260,7 +263,7 @@ pub fn create_current_version(conn: &mut rusqlite::Connection) -> Result<DB> {
     if let Some(next_schema) = next_schema {
         if next_schema != db.schema {
             // TODO Use custom ErrorKind https://github.com/brson/error-chain/issues/117
-            bail!(ErrorKind::NotYetImplemented(format!("Initial bootstrap transaction did not produce expected bootstrap schema")));
+            bail!(DbError::NotYetImplemented(format!("Initial bootstrap transaction did not produce expected bootstrap schema")));
         }
     }
 
@@ -282,7 +285,7 @@ pub fn ensure_current_version(conn: &mut rusqlite::Connection) -> Result<DB> {
         CURRENT_VERSION => read_db(conn),
 
         // TODO: support updating an existing store.
-        v => bail!(ErrorKind::NotYetImplemented(format!("Opening databases with Mentat version: {}", v))),
+        v => bail!(DbError::NotYetImplemented(format!("Opening databases with Mentat version: {}", v))),
     }
 }
 
@@ -312,7 +315,7 @@ impl TypedSQLValue for TypedValue {
                 let u = Uuid::from_bytes(x.as_slice());
                 if u.is_err() {
                     // Rather than exposing Uuid's ParseError…
-                    bail!(ErrorKind::BadSQLValuePair(rusqlite::types::Value::Blob(x),
+                    bail!(DbError::BadSQLValuePair(rusqlite::types::Value::Blob(x),
                                                      value_type_tag));
                 }
                 Ok(TypedValue::Uuid(u.unwrap()))
@@ -320,7 +323,7 @@ impl TypedSQLValue for TypedValue {
             (13, rusqlite::types::Value::Text(x)) => {
                 to_namespaced_keyword(&x).map(|k| k.into())
             },
-            (_, value) => bail!(ErrorKind::BadSQLValuePair(value, value_type_tag)),
+            (_, value) => bail!(DbError::BadSQLValuePair(value, value_type_tag)),
         }
     }
 
@@ -403,12 +406,12 @@ fn read_ident_map(conn: &rusqlite::Connection) -> Result<IdentMap> {
     let v = read_materialized_view(conn, "idents")?;
     v.into_iter().map(|(e, a, typed_value)| {
         if a != entids::DB_IDENT {
-            bail!(ErrorKind::NotYetImplemented(format!("bad idents materialized view: expected :db/ident but got {}", a)));
+            bail!(DbError::NotYetImplemented(format!("bad idents materialized view: expected :db/ident but got {}", a)));
         }
         if let TypedValue::Keyword(keyword) = typed_value {
             Ok((keyword.as_ref().clone(), e))
         } else {
-            bail!(ErrorKind::NotYetImplemented(format!("bad idents materialized view: expected [entid :db/ident keyword] but got [entid :db/ident {:?}]", typed_value)));
+            bail!(DbError::NotYetImplemented(format!("bad idents materialized view: expected [entid :db/ident keyword] but got [entid :db/ident {:?}]", typed_value)));
         }
     }).collect()
 }
@@ -941,7 +944,7 @@ pub fn update_partition_map(conn: &rusqlite::Connection, partition_map: &Partiti
     let max_vars = conn.limit(Limit::SQLITE_LIMIT_VARIABLE_NUMBER) as usize;
     let max_partitions = max_vars / values_per_statement;
     if partition_map.len() > max_partitions {
-        bail!(ErrorKind::NotYetImplemented(format!("No more than {} partitions are supported", max_partitions)));
+        bail!(DbError::NotYetImplemented(format!("No more than {} partitions are supported", max_partitions)));
     }
 
     // Like "UPDATE parts SET idx = CASE WHEN part = ? THEN ? WHEN part = ? THEN ? ELSE idx END".
@@ -1018,8 +1021,8 @@ SELECT EXISTS
                     // error message in this case.
                     if unique_value_stmt.execute(&[to_bool_ref(attribute.unique.is_some()), &entid as &ToSql]).is_err() {
                         match attribute.unique {
-                            Some(attribute::Unique::Value) => bail!(ErrorKind::SchemaAlterationFailed(format!("Cannot alter schema attribute {} to be :db.unique/value", entid))),
-                            Some(attribute::Unique::Identity) => bail!(ErrorKind::SchemaAlterationFailed(format!("Cannot alter schema attribute {} to be :db.unique/identity", entid))),
+                            Some(attribute::Unique::Value) => bail!(DbError::SchemaAlterationFailed(format!("Cannot alter schema attribute {} to be :db.unique/value", entid))),
+                            Some(attribute::Unique::Identity) => bail!(DbError::SchemaAlterationFailed(format!("Cannot alter schema attribute {} to be :db.unique/identity", entid))),
                             None => unreachable!(), // This shouldn't happen, even after we support removing :db/unique.
                         }
                     }
@@ -1033,7 +1036,7 @@ SELECT EXISTS
                     if !attribute.multival {
                         let mut rows = cardinality_stmt.query(&[&entid as &ToSql])?;
                         if rows.next().is_some() {
-                            bail!(ErrorKind::SchemaAlterationFailed(format!("Cannot alter schema attribute {} to be :db.cardinality/one", entid)));
+                            bail!(DbError::SchemaAlterationFailed(format!("Cannot alter schema attribute {} to be :db.cardinality/one", entid)));
                         }
                     }
                 },
@@ -2636,7 +2639,7 @@ mod tests {
         let report = conn.transact_simple_terms(terms, InternSet::new());
 
         match report.unwrap_err() {
-            errors::Error(ErrorKind::SchemaConstraintViolation(errors::SchemaConstraintViolation::TypeDisagreements { conflicting_datoms }), _) => {
+            errors::Error(DbError::SchemaConstraintViolation(errors::SchemaConstraintViolation::TypeDisagreements { conflicting_datoms }), _) => {
                 let mut map = BTreeMap::default();
                 map.insert((100, entids::DB_TX_INSTANT, TypedValue::Long(-1)), ValueType::Instant);
                 map.insert((200, entids::DB_IDENT, TypedValue::typed_string("test")), ValueType::Keyword);
