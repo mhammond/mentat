@@ -35,7 +35,7 @@ uuid = { version = "0.5", features = ["v4", "serde"] }
 [dependencies.rusqlite]
 version = "0.13"
 # System sqlite might be very old.
-features = ["limits"]
+features = ["limits", "sqlcipher"]
 
 [dependencies.edn]
 path = "edn"

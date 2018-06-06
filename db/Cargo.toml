@@ -2,6 +2,7 @@
 name = "mentat_db"
 version = "0.0.1"
 workspace = ".."
+build = "build.rs"
 
 [dependencies]
 error-chain = { git = "https://github.com/rnewman/error-chain", branch = "rnewman/sync" }
@@ -16,7 +17,7 @@ petgraph = "0.4.12"
 
 [dependencies.rusqlite]
 version = "0.13"
-features = ["limits"]
+features = ["limits", "sqlcipher"]
 
 [dependencies.edn]
 path = "../edn"
