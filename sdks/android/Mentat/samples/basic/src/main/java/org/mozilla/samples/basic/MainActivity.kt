@@ -12,6 +12,8 @@ package org.mozilla.samples.basic
 
 import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
+import android.util.Log;
+
 
 import org.mozilla.mentat.Mentat
 
@@ -21,7 +23,10 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        Log.i("MENTAT", "Mentat sample about to open mentat");
         Mentat(this.getDatabasePath("test.db").absolutePath).use {
+            Log.i("MENTAT", "Mentat sample did something!");
+
         }
     }
 }

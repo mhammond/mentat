@@ -84,7 +84,8 @@ pub fn new_connection<T>(uri: T) -> rusqlite::Result<rusqlite::Connection> where
     // necessary to store temp files on disk. Ideally, consumers should be able to
     // override this behaviour (see issue 505).
     conn.execute_batch("
-        PRAGMA page_size=32768;
+        PRAGMA key='passphrase';
+        PRAGMA cipher_page_size=32768;
         PRAGMA journal_mode=wal;
         PRAGMA wal_autocheckpoint=32;
         PRAGMA journal_size_limit=3145728;
