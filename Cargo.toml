@@ -21,7 +21,7 @@ bundled_sqlite3 = ["rusqlite/bundled"]
 sqlcipher = ["rusqlite/sqlcipher", "mentat_db/sqlcipher"]
 
 [workspace]
-members = ["tools/cli", "ffi", "sync15/logins"]
+members = ["tools/cli", "ffi", "sync15/logins", "sync15/logins/ffi"]
 
 [build-dependencies]
 rustc_version = "0.2"
